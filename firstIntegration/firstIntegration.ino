@@ -17,6 +17,9 @@ static const uint8_t PROGMEM smile_bmp[] = {B00111100, B01000010, B10100101,
                                             B10000001, B10011001, B10100101,
                                             B01000010, B00111100};
 
+//sort algorithm
+#include <ArduinoSort.h>
+
 // Sound sensor
 #define pinAdc A0
 int lastValue = 0;
@@ -68,35 +71,35 @@ void loop() {
       matrix.clear();
       matrix.drawBitmap(0, 0, smile_bmp, 8, 8, LED_GREEN);
       matrix.writeDisplay();
+      delay(500);
     }
 
     // Sound sensor
-    long values[4];
-    lastValue = 0;
-    for (int j = 0; j < 4; j++) {
-      long sum = 0;
-      for (int i = 0; i < 16; i++) {
-        sum += analogRead(pinAdc);
-      }
-      sum >>= 4;
-      values[j] = sum;
-      if (sum - lastValue > 200) {
-        SeeedOled.putString("LOUD!!\n");
-      }
-      lastValue = sum;
-      Serial.println(sum);
-      // use a counter instead of for loop
-      // add median
-      delay(50);
+    
+    long sum = 0;
+    for (int i = 0; i < 16; i++) {
+      sum += analogRead(pinAdc);
     }
-    else {
-      // Matrix display
-      if (!ifPrinted) {
-        ifPrinted = true;
-        matrix.clear();
-        matrix.drawBitmap(0, 0, frown_bmp, 8, 8, LED_GREEN);
-        matrix.writeDisplay();
-      }
+    sum >>= 4;
+    
+    if (sum - lastValue > 180) {
+      SeeedOled.putString("LOUD!!\n");
     }
-    delay(500);
+    lastValue = sum;
+    
+    Serial.println(sum);
+    // use a counter instead of for loop
+    delay(50);
   }
+  else{
+        // Matrix display
+        if (!ifPrinted) {
+          ifPrinted = true;
+          matrix.clear();
+          matrix.drawBitmap(0, 0, frown_bmp, 8, 8, LED_RED);
+          matrix.writeDisplay();
+          delay(500);
+        }
+  }
+  
+}
