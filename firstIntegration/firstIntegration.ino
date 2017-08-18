@@ -1,3 +1,12 @@
+// define the state of the system
+#define NORMAL 0
+#define TEMP_WRONG 1
+#define SOUND_WRONG (1 << 1)
+#define DIS_WRONG (1 << 2)
+
+int old_state = NORMAL;
+
+
 #include <Wire.h>
 // for the OLED display
 #include <SeeedOLED.h>
@@ -53,14 +62,14 @@ dht DHT;
 
 // Touch switch
 #define Touch 9
-boolean isOn = false;
+boolean isOn= false;
 
 void setup() {
   Serial.begin(115200);
 
   // OLED display
   Wire.begin();
-  SeeedOled.init();          // initialze SEEED OLED display
+  SeeedOled.init();          // initialise SEEED OLED display
   SeeedOled.clearDisplay();  // clear the screen and set start position to top
                              // left corner
   SeeedOled
@@ -77,25 +86,39 @@ void setup() {
 }
 
 void loop() {
-  // Switch
+  // if the button is touched
   if (digitalRead(Touch) == 1) {
     isOn = !isOn;
-    ifPrinted = false;
+    if(!isOn){
+      // and it is turned off
+      // clear the OLED 
+      SeeedOled.clearDisplay();
+      // display it is off
+      SeeedOled.putString("Monitoring is off.");
+
+      // also for the matrix
+      matrix.clear();
+      matrix.drawBitmap(0, 0, frown_bmp, 8, 8, LED_YELLOW);
+      matrix.writeDisplay();
+    }
+    // or it is just be turned on
+    else{
+      // clear the OLED 
+      SeeedOled.clearDisplay();
+
+      // also for the matrix
+      matrix.clear();
+
+      // set the old state to be normal
+      old_state = NORMAL;
+    }
   }
 
   if (isOn) {
-    SeeedOled.clearDisplay();
-    // Matrix display
-    if (!ifPrinted) {
-      ifPrinted = true;
-      matrix.clear();
-      matrix.drawBitmap(0, 0, smile_bmp, 8, 8, LED_GREEN);
-    }
 
-    bool ifNormal = true;
+    int current_state = NORMAL;
 
     // Sound sensor
-
     long sum = 0;
     for (int i = 0; i < 16; i++) {
       sum += analogRead(pinAdc);
@@ -103,11 +126,8 @@ void loop() {
     sum >>= 4;
 
     if (sum - lastValue > 180) {
-      SeeedOled.putString("LOUD!!\n");
-      matrix.clear();
-      matrix.drawBitmap(0, 0, exclamation_bmp, 8, 8, LED_RED);
-      ifPrinted = false;
-      ifNormal = false;
+      // ifPrinted = false;
+      current_state = current_state | SOUND_WRONG;
     }
     lastValue = sum;
 
@@ -115,45 +135,80 @@ void loop() {
     // use a counter instead of for loop
     delay(50);
 
+
+
+
     // Distance sensors
     int LCurrentDistance = sonarLeft.ping_cm();
     int RCurrentDistance = sonarRight.ping_cm();
     if (LCurrentDistance <= LDefaultDistance - 10 ||
         RCurrentDistance <= RDefaultDistance - 10) {
-      SeeedOled.putString("The Baby is trying to crawl out!");
-      matrix.clear();
-      matrix.drawBitmap(0, 0, exclamation_bmp, 8, 8, LED_RED);
-      ifPrinted = false;
-      ifNormal = false;
+      current_state = current_state | DIS_WRONG;
+
     }
 
     // Temperature and Humidity
     DHT.read22(DHT22_PIN);
     if (DHT.temperature < TEMP_LOWER_BOUND ||
         DHT.temperature > TEMP_UPPER_BOUND) {
+      current_state = current_state | TEMP_WRONG;
+
+    }
+
+        // display
+    if(old_state != current_state){
+      // the current state is normal
+      if(current_state == 0){
+        SeeedOled.putString("All is OK.");
+        matrix.clear();
+        matrix.drawBitmap(0, 0, smile_bmp, 8, 8, LED_GREEN);
+      }
+      // something went wrong
+      else{
+        // if current_state contains TEMP_WRONG i.e current_state & TEMP_WRONG != 0
+        if (current_state & TEMP_WRONG){
           SeeedOled.putString("The temperature is not comfortable!");
           matrix.clear();
           matrix.drawBitmap(0, 0, exclamation_bmp, 8, 8, LED_RED);
-          ifPrinted = false;
-          ifNormal = false;
-    }
-
-    if(ifNormal){
-      SeeedOled.putString("All is OK.");
+        }
+        if (current_state & SOUND_WRONG){
+          SeeedOled.putString("The Baby is crying?");
+          matrix.clear();
+          matrix.drawBitmap(0, 0, exclamation_bmp, 8, 8, LED_RED);
+        }
+        if (current_state & DIS_WRONG){
+          SeeedOled.putString("The Baby is trying to climb out!");
+          matrix.clear();
+          matrix.drawBitmap(0, 0, exclamation_bmp, 8, 8, LED_RED);
+        }
+      }
     }
 
     // Write display at the end after deciding what to display
     matrix.writeDisplay();
-  } else {
-    // OLED
-    SeeedOled.clearDisplay();
-    SeeedOled.putString("Monitoring is off.");
-    // Matrix display
-    if (!ifPrinted) {
-      ifPrinted = true;
-      matrix.clear();
-      matrix.drawBitmap(0, 0, frown_bmp, 8, 8, LED_GREEN);
-      matrix.writeDisplay();
-    }
   }
+  // // the monitoring is off 
+  // else {
+
+  //   // Matrix display
+  //   if (!ifPrinted) {
+  //     ifPrinted = true;
+
+  //   }
+  // }
+
+
+  // // Matrix display
+  // if (!ifPrinted) {
+  //   ifPrinted = true;
+    
+  // }
+
+
+
+
+
+
+
+
 }
