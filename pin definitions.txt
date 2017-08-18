@@ -1,0 +1,14 @@
+//Distance sensors:
+#define LtrigPin 4
+#define LechoPin 5
+
+#define RtrigPin 6
+#define RechoPin 7
+
+//Temp and Humidity
+#define THPin 8
+
+
+//Touch switch
+#define Touch 9
+
