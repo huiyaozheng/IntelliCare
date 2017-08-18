@@ -15,7 +15,11 @@ static const uint8_t PROGMEM smile_bmp[] = {B00111100, B01000010, B10100101,
                                               B01000010, B00111100},
                              frown_bmp[] = {B00111100, B01000010, B10100101,
                                             B10000001, B10011001, B10100101,
-                                            B01000010, B00111100};
+                                            B01000010, B00111100},
+                             exclamation_bmp[] = {
+                                 B00011000, B00011000, B00011000, B00011000,
+                                 B00011000, B00000000, B00011000, B00011000,
+};
 
 //sort algorithm
 #include <ArduinoSort.h>
@@ -31,8 +35,31 @@ int lastValue = 0;
 #define RtrigPin 6
 #define RechoPin 7
 
+#include <NewPing.h>
+#define MAX_DISTANCE 200
+
+NewPing sonarLeft(LtrigPin, LechoPin, MAX_DISTANCE);
+NewPing sonarRight(RtrigPin, RechoPin, MAX_DISTANCE);
+
+int LDefaultDistance;
+int RDefaultDistance;
+
 // Temp and Humidity
-#define THPin 8
+#include <dht.h>
+dht DHT;
+#define DHT22_PIN 8
+struct
+{
+    uint32_t total;
+    uint32_t ok;
+    uint32_t crc_error;
+    uint32_t time_out;
+    uint32_t connect;
+    uint32_t ack_l;
+    uint32_t ack_h;
+    uint32_t unknown;
+} stat = { 0,0,0,0,0,0,0,0};
+
 
 // Touch switch
 #define Touch 9
@@ -53,6 +80,10 @@ void setup() {
 
   // Matrix display
   matrix.begin(0x70);  // pass in the address
+
+  // Distance sensors
+  LDefaultDistance = sonarLeft.ping_cm();
+  RDefaultDistance = sonarRight.ping_cm();
 }
 
 void loop() {
@@ -70,8 +101,6 @@ void loop() {
       ifPrinted = true;
       matrix.clear();
       matrix.drawBitmap(0, 0, smile_bmp, 8, 8, LED_GREEN);
-      matrix.writeDisplay();
-      delay(500);
     }
 
     // Sound sensor
@@ -90,16 +119,27 @@ void loop() {
     Serial.println(sum);
     // use a counter instead of for loop
     delay(50);
-  }
-  else{
-        // Matrix display
-        if (!ifPrinted) {
-          ifPrinted = true;
-          matrix.clear();
-          matrix.drawBitmap(0, 0, frown_bmp, 8, 8, LED_RED);
-          matrix.writeDisplay();
-          delay(500);
-        }
-  }
   
+    // Distance sensors
+    int LCurrentDistance = sonarLeft.ping_cm();
+    int RCurrentDistance = sonarRight.ping_cm();
+    if (LCurrentDistance <= LDefaultDistance - 10 ||
+        RCurrentDistance <= RDefaultDistance - 10) {
+      SeeedOled.putString("The Baby is trying to crawl out!");
+      matrix.clear();
+      matrix.drawBitmap(0, 0, exclamation_bmp, 8, 8, LED_RED);
+      ifPrinted = false;
+    }
+
+    // Write display at the end after deciding what to display
+    matrix.writeDisplay();
+  } else {
+    // Matrix display
+    if (!ifPrinted) {
+      ifPrinted = true;
+      matrix.clear();
+      matrix.drawBitmap(0, 0, frown_bmp, 8, 8, LED_GREEN);
+      matrix.writeDisplay();
+    }
+  }
 }
