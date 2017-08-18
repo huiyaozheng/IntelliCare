@@ -78,8 +78,6 @@ void setup() {
 
 void loop() {
   // Switch
-  isOn = (digitalRead(Touch) == 1) ? (!isOn) : isOn;
-
   if (digitalRead(Touch) == 1) {
     isOn = !isOn;
     ifPrinted = false;
