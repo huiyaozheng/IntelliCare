@@ -21,7 +21,7 @@ static const uint8_t PROGMEM smile_bmp[] = {B00111100, B01000010, B10100101,
                                  B00011000, B00000000, B00011000, B00011000,
 };
 
-//sort algorithm
+// sort algorithm
 #include <ArduinoSort.h>
 
 // Sound sensor
@@ -48,18 +48,8 @@ int RDefaultDistance;
 #include <dht.h>
 dht DHT;
 #define DHT22_PIN 8
-struct
-{
-    uint32_t total;
-    uint32_t ok;
-    uint32_t crc_error;
-    uint32_t time_out;
-    uint32_t connect;
-    uint32_t ack_l;
-    uint32_t ack_h;
-    uint32_t unknown;
-} stat = { 0,0,0,0,0,0,0,0};
-
+#define TEMP_LOWER_BOUND 22
+#define TEMP_UPPER_BOUND 27
 
 // Touch switch
 #define Touch 9
@@ -96,6 +86,7 @@ void loop() {
   }
 
   if (isOn) {
+    SeeedOled.clearDisplay();
     // Matrix display
     if (!ifPrinted) {
       ifPrinted = true;
@@ -103,23 +94,29 @@ void loop() {
       matrix.drawBitmap(0, 0, smile_bmp, 8, 8, LED_GREEN);
     }
 
+    bool ifNormal = true;
+
     // Sound sensor
-    
+
     long sum = 0;
     for (int i = 0; i < 16; i++) {
       sum += analogRead(pinAdc);
     }
     sum >>= 4;
-    
+
     if (sum - lastValue > 180) {
       SeeedOled.putString("LOUD!!\n");
+      matrix.clear();
+      matrix.drawBitmap(0, 0, exclamation_bmp, 8, 8, LED_RED);
+      ifPrinted = false;
+      ifNormal = false;
     }
     lastValue = sum;
-    
+
     Serial.println(sum);
     // use a counter instead of for loop
     delay(50);
-  
+
     // Distance sensors
     int LCurrentDistance = sonarLeft.ping_cm();
     int RCurrentDistance = sonarRight.ping_cm();
@@ -129,11 +126,30 @@ void loop() {
       matrix.clear();
       matrix.drawBitmap(0, 0, exclamation_bmp, 8, 8, LED_RED);
       ifPrinted = false;
+      ifNormal = false;
+    }
+
+    // Temperature and Humidity
+    DHT.read22(DHT22_PIN);
+    if (DHT.temperature < TEMP_LOWER_BOUND ||
+        DHT.temperature > TEMP_UPPER_BOUND) {
+          SeeedOled.putString("The temperature is not comfortable!");
+          matrix.clear();
+          matrix.drawBitmap(0, 0, exclamation_bmp, 8, 8, LED_RED);
+          ifPrinted = false;
+          ifNormal = false;
+    }
+
+    if(ifNormal){
+      SeeedOled.putString("All is OK.");
     }
 
     // Write display at the end after deciding what to display
     matrix.writeDisplay();
   } else {
+    // OLED
+    SeeedOled.clearDisplay();
+    SeeedOled.putString("Monitoring is off.");
     // Matrix display
     if (!ifPrinted) {
       ifPrinted = true;
