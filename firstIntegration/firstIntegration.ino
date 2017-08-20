@@ -1,11 +1,10 @@
 // define the state of the system
 #define NORMAL 0
-#define TEMP_WRONG 1
-#define SOUND_WRONG (1 << 1)
-#define DIS_WRONG (1 << 2)
+#define TEMP_ALERT 1
+#define SOUND_ALERT (1 << 1)
+#define DIS_ALERT (1 << 2)
 
 int old_state = NORMAL;
-
 
 #include <Wire.h>
 // for the OLED display
@@ -62,7 +61,7 @@ dht DHT;
 
 // Touch switch
 #define Touch 9
-boolean isOn= false;
+boolean isOn = false;
 
 void setup() {
   Serial.begin(115200);
@@ -89,9 +88,9 @@ void loop() {
   // if the button is touched
   if (digitalRead(Touch) == 1) {
     isOn = !isOn;
-    if(!isOn){
+    if (!isOn) {
       // and it is turned off
-      // clear the OLED 
+      // clear the OLED
       SeeedOled.clearDisplay();
       // display it is off
       SeeedOled.putString("Monitoring is off.");
@@ -101,9 +100,9 @@ void loop() {
       matrix.drawBitmap(0, 0, frown_bmp, 8, 8, LED_YELLOW);
       matrix.writeDisplay();
     }
-    // or it is just be turned on
-    else{
-      // clear the OLED 
+    // or it is just turned on
+    else {
+      // clear the OLED
       SeeedOled.clearDisplay();
 
       // also for the matrix
@@ -115,7 +114,6 @@ void loop() {
   }
 
   if (isOn) {
-
     int current_state = NORMAL;
 
     // Sound sensor
@@ -127,7 +125,7 @@ void loop() {
 
     if (sum - lastValue > 180) {
       // ifPrinted = false;
-      current_state = current_state | SOUND_WRONG;
+      current_state = current_state | SOUND_ALERT;
     }
     lastValue = sum;
 
@@ -135,80 +133,48 @@ void loop() {
     // use a counter instead of for loop
     delay(50);
 
-
-
-
     // Distance sensors
     int LCurrentDistance = sonarLeft.ping_cm();
     int RCurrentDistance = sonarRight.ping_cm();
     if (LCurrentDistance <= LDefaultDistance - 10 ||
         RCurrentDistance <= RDefaultDistance - 10) {
-      current_state = current_state | DIS_WRONG;
-
+      current_state = current_state | DIS_ALERT;
     }
 
     // Temperature and Humidity
     DHT.read22(DHT22_PIN);
     if (DHT.temperature < TEMP_LOWER_BOUND ||
         DHT.temperature > TEMP_UPPER_BOUND) {
-      current_state = current_state | TEMP_WRONG;
-
+      current_state = current_state | TEMP_ALERT;
     }
 
-        // display
-    if(old_state != current_state){
+    // display
+    if (old_state != current_state) {
       // the current state is normal
-      if(current_state == 0){
+      if (current_state == 0) {
         SeeedOled.putString("All is OK.");
         matrix.clear();
         matrix.drawBitmap(0, 0, smile_bmp, 8, 8, LED_GREEN);
       }
       // something went wrong
-      else{
-        // if current_state contains TEMP_WRONG i.e current_state & TEMP_WRONG != 0
-        if (current_state & TEMP_WRONG){
-          SeeedOled.putString("The temperature is not comfortable!");
-          matrix.clear();
-          matrix.drawBitmap(0, 0, exclamation_bmp, 8, 8, LED_RED);
+      else {
+        // if current_state contains TEMP_ALERT
+        string alert = "";
+        if (current_state & TEMP_ALERT) {
+          alert = alert + "The temperature is not comfortable!\n";
         }
-        if (current_state & SOUND_WRONG){
-          SeeedOled.putString("The Baby is crying?");
-          matrix.clear();
-          matrix.drawBitmap(0, 0, exclamation_bmp, 8, 8, LED_RED);
+        if (current_state & SOUND_ALERT) {
+          alert = alert + "The Baby is crying!\n";
         }
-        if (current_state & DIS_WRONG){
-          SeeedOled.putString("The Baby is trying to climb out!");
-          matrix.clear();
-          matrix.drawBitmap(0, 0, exclamation_bmp, 8, 8, LED_RED);
+        if (current_state & DIS_ALERT) {
+          alert = alert + "The Baby is trying to climb out!";
         }
+        SeeedOled.putString(alert);
+        matrix.clear();
+        matrix.drawBitmap(0, 0, exclamation_bmp, 8, 8, LED_RED);
       }
     }
-
     // Write display at the end after deciding what to display
     matrix.writeDisplay();
   }
-  // // the monitoring is off 
-  // else {
-
-  //   // Matrix display
-  //   if (!ifPrinted) {
-  //     ifPrinted = true;
-
-  //   }
-  // }
-
-
-  // // Matrix display
-  // if (!ifPrinted) {
-  //   ifPrinted = true;
-    
-  // }
-
-
-
-
-
-
-
-
 }
