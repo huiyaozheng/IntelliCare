@@ -79,10 +79,24 @@ void setup() {
 
   // Matrix display
   matrix.begin(0x70);  // pass in the address
+  matrix.clear();
+  matrix.writeDisplay();
 
   // Distance sensors
   LDefaultDistance = sonarLeft.ping_cm();
   RDefaultDistance = sonarRight.ping_cm();
+}
+
+void printData(long soundVal, int leftDist, int rightDist, float temperature){
+  Serial.print("Sound:");
+  Serial.println(soundVal);
+  Serial.print("Left distance:");
+  Serial.println(leftDist);
+  Serial.print("Right distance");
+  Serial.println(rightDist);
+  Serial.print("Temperature:");
+  Serial.println(temperature);
+  Serial.println();
 }
 
 void loop() {
@@ -149,12 +163,14 @@ void loop() {
       current_state = current_state | DIS_ALERT;
     }
 
-    // Temperature and Humidity
+    // Temperature
     DHT.read22(DHT22_PIN);
     if (DHT.temperature < TEMP_LOWER_BOUND ||
         DHT.temperature > TEMP_UPPER_BOUND) {
       current_state = current_state | TEMP_ALERT;
     }
+
+    printData(avgSoundVal, LCurrentDistance, RCurrentDistance, DHT.temperature);
 
     // display
     if (old_state != current_state) {
@@ -162,6 +178,7 @@ void loop() {
       // the current state is normal
       if (current_state == 0) {
         SeeedOled.putString("All is OK.");
+        matrix.clear();
       }
       // something went wrong
       else {
@@ -183,20 +200,20 @@ void loop() {
         matrix.clear();
         matrix.drawBitmap(0, 0, exclamation_bmp, 8, 8, LED_RED);
       }
-      // to blink the matrix 
-      if (current_state != 0){
-        if (toDisplayMatrix){
-          matrix.drawBitmap(0, 0, exclamation_bmp, 8, 8, LED_RED);
-        }
-        else{
-          matrix.clear();
-        }
-        toDisplayMatrix = !toDisplayMatrix;
+    }
+    // to blink the matrix 
+    if (current_state != 0){
+      if (toDisplayMatrix){
+        matrix.drawBitmap(0, 0, exclamation_bmp, 8, 8, LED_RED);
       }
-
-
+      else{
+        matrix.clear();
+      }
+      toDisplayMatrix = !toDisplayMatrix;
     }
     // Write display at the end after deciding what to display
     matrix.writeDisplay();
+    // set the old state to the current state
+    old_state = current_state;
   }
 }
