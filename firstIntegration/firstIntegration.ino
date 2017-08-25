@@ -119,6 +119,7 @@ void loop() {
       // turn off the display
       delay(2000);
       matrix.clear();
+      matrix.writeDisplay();
     }
     // or it is just turned on
     else {
@@ -183,6 +184,7 @@ void loop() {
       // something went wrong
       else {
         // if current_state contains TEMP_ALERT
+        toDisplayMatrix = true;
         String alert = "";
         if (current_state & TEMP_ALERT) {
           alert = alert + "The temperature is not comfortable!\n";
