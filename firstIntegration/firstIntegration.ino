@@ -34,7 +34,7 @@ bool toDisplayMatrix = true;
 // Sound sensor
 #define pinAdc A0
 int lastSoundValue = 0;
-#define SOUND_THRESHOLD 180
+#define SOUND_THRESHOLD 100
 
 // Distance sensors:
 #define LtrigPin 4
