@@ -29,9 +29,6 @@ static const uint8_t PROGMEM smile_bmp[] = {B00111100, B01000010, B10100101,
                                  B00011000, B00000000, B00011000, B00011000,
 };
 
-// sort algorithm
-#include <ArduinoSort.h>
-
 // Sound sensor
 #define pinAdc A0
 int lastValue = 0;
@@ -85,6 +82,8 @@ void setup() {
 }
 
 void loop() {
+  delay(200);
+
   // if the button is touched
   if (digitalRead(Touch) == 1) {
     isOn = !isOn;
@@ -129,9 +128,7 @@ void loop() {
     }
     lastValue = sum;
 
-    Serial.println(sum);
-    // use a counter instead of for loop
-    delay(50);
+    //Serial.println(sum);
 
     // Distance sensors
     int LCurrentDistance = sonarLeft.ping_cm();
