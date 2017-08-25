@@ -4,7 +4,14 @@
 #define SOUND_ALERT (1 << 1)
 #define DIS_ALERT (1 << 2)
 
-int old_state = NORMAL;
+// To ensure there is a change of state at startup.
+int old_state = -1;
+
+#define MAX_LOOP_BEFORE_ALERT 5
+#define LOOP_OF_ALERT 5
+
+int currentErrorLoopCount = 0;
+int remainingAlertLoops = LOOP_OF_ALERT;
 
 #include <Wire.h>
 // for the OLED display
@@ -15,21 +22,28 @@ int old_state = NORMAL;
 #include "Adafruit_LEDBackpack.h"
 bool ifPrinted = false;
 Adafruit_BicolorMatrix matrix = Adafruit_BicolorMatrix();
-static const uint8_t PROGMEM smile_bmp[] = {B00111100, B01000010, B10100101,
-                                            B10000001, B10100101, B10011001,
-                                            B01000010, B00111100},
-                             neutral_bmp[] = {B00111100, B01000010, B10100101,
-                                              B10000001, B10111101, B10000001,
-                                              B01000010, B00111100},
-                             frown_bmp[] = {B00111100, B01000010, B10100101,
-                                            B10000001, B10011001, B10100101,
-                                            B01000010, B00111100},
-                             exclamation_bmp[] = {
-                                 B00011000, B00011000, B00011000, B00011000,
-                                 B00011000, B00000000, B00011000, B00011000,
+static const uint8_t PROGMEM on_bmp[] = {B00000000, 
+                                            B01001001, 
+                                            B10101101,
+                                            B10101101, 
+                                            B10101011, 
+                                            B10101011,
+                                            B01001001, 
+                                            B00000000},                            
+                             off_bmp[] = {B00000000, 
+                                            B01011011, 
+                                            B10110010,
+                                            B10110010, 
+                                            B10111011, 
+                                            B10110010,
+                                            B01010010, 
+                                            B00000000},
+                             alert_bmp[] = {
+                                 B11111111, B11111111, B11111111, B11111111,
+                                 B11111111, B11111111, B11111111, B11111111
 };
 // control the blinking of matrix when there is an alert
-bool toDisplayMatrix = true;
+bool blinkOn = true;
 
 // Sound sensor
 #define pinAdc A0
@@ -87,7 +101,7 @@ void setup() {
   RDefaultDistance = sonarRight.ping_cm();
 }
 
-void printData(long soundVal, int leftDist, int rightDist, float temperature){
+void printData(long soundVal, int leftDist, int rightDist, float temperature) {
   Serial.print("Sound:");
   Serial.println(soundVal);
   Serial.print("Left distance:");
@@ -114,7 +128,7 @@ void loop() {
 
       // also for the matrix
       matrix.clear();
-      matrix.drawBitmap(0, 0, frown_bmp, 8, 8, LED_YELLOW);
+      matrix.drawBitmap(0, 0, off_bmp, 8, 8, LED_YELLOW);
       matrix.writeDisplay();
       // turn off the display
       delay(2000);
@@ -130,7 +144,7 @@ void loop() {
       matrix.clear();
 
       // to show the system is turned on
-      matrix.drawBitmap(0, 0, smile_bmp, 8, 8, LED_YELLOW);
+      matrix.drawBitmap(0, 0, on_bmp, 8, 8, LED_YELLOW);
       matrix.writeDisplay();
       delay(2000);
       matrix.clear();
@@ -159,8 +173,8 @@ void loop() {
     // Distance sensors
     int LCurrentDistance = sonarLeft.ping_cm();
     int RCurrentDistance = sonarRight.ping_cm();
-    if (LDefaultDistance - LCurrentDistance >=  DISTANCE_THRESHOLD ||
-        RDefaultDistance - RCurrentDistance >=  DISTANCE_THRESHOLD) {
+    if (LDefaultDistance - LCurrentDistance >= DISTANCE_THRESHOLD ||
+        RDefaultDistance - RCurrentDistance >= DISTANCE_THRESHOLD) {
       current_state = current_state | DIS_ALERT;
     }
 
@@ -178,40 +192,53 @@ void loop() {
       SeeedOled.clearDisplay();
       // the current state is normal
       if (current_state == 0) {
+        currentErrorLoopCount = 0;
+        remainingAlertLoops = 0;
         SeeedOled.putString("All is OK.");
         matrix.clear();
       }
       // something went wrong
       else {
-        // if current_state contains TEMP_ALERT
-        toDisplayMatrix = true;
         String alert = "";
-        if (current_state & TEMP_ALERT) {
-          alert = alert + "The temperature is not comfortable!\n";
-        }
         if (current_state & SOUND_ALERT) {
           alert = alert + "The Baby is crying!\n";
+          remainingAlertLoops = LOOP_OF_ALERT;
+          blinkOn = true;
         }
-        if (current_state & DIS_ALERT) {
-          alert = alert + "The Baby is trying to climb out!";
+        if (current_state & TEMP_ALERT || current_state & DIS_ALERT) {
+          if (current_state & TEMP_ALERT) {
+            alert = alert + "The temperature is not comfortable!\n";
+          }
+          if (current_state & DIS_ALERT) {
+            alert = alert + "The Baby is trying to climb out!";
+          }
+          currentErrorLoopCount++;
+          if (currentErrorLoopCount >= MAX_LOOP_BEFORE_ALERT) {
+            currentErrorLoopCount = 0;
+            remainingAlertLoops = LOOP_OF_ALERT;
+            blinkOn = true;
+          }
         }
+
         int alertLength = alert.length();
-        char alertCharArray [alertLength];
+        char alertCharArray[alertLength];
         alert.toCharArray(alertCharArray, alertLength);
         SeeedOled.putString(alertCharArray);
         matrix.clear();
-        matrix.drawBitmap(0, 0, exclamation_bmp, 8, 8, LED_RED);
+        matrix.drawBitmap(0, 0, alert_bmp, 8, 8, LED_RED);
       }
     }
-    // to blink the matrix 
-    if (current_state != 0){
-      if (toDisplayMatrix){
-        matrix.drawBitmap(0, 0, exclamation_bmp, 8, 8, LED_RED);
-      }
-      else{
+    // to blink the matrix
+    if (remainingAlertLoops > 0) {
+      if (blinkOn) {
+        matrix.drawBitmap(0, 0, alert_bmp, 8, 8, LED_RED);
+      } else {
         matrix.clear();
       }
-      toDisplayMatrix = !toDisplayMatrix;
+      blinkOn = !blinkOn;
+      remainingAlertLoops--;
+    } else {
+      matrix.clear();
     }
     // Write display at the end after deciding what to display
     matrix.writeDisplay();
