@@ -28,10 +28,13 @@ static const uint8_t PROGMEM smile_bmp[] = {B00111100, B01000010, B10100101,
                                  B00011000, B00011000, B00011000, B00011000,
                                  B00011000, B00000000, B00011000, B00011000,
 };
+// control the blinking of matrix when there is an alert
+bool toDisplayMatrix = true;
 
 // Sound sensor
 #define pinAdc A0
-int lastValue = 0;
+int lastSoundValue = 0;
+#define SOUND_THRESHOLD 180
 
 // Distance sensors:
 #define LtrigPin 4
@@ -42,6 +45,7 @@ int lastValue = 0;
 
 #include <NewPing.h>
 #define MAX_DISTANCE 200
+#define DISTANCE_THRESHOLD 5
 
 NewPing sonarLeft(LtrigPin, LechoPin, MAX_DISTANCE);
 NewPing sonarRight(RtrigPin, RechoPin, MAX_DISTANCE);
@@ -98,13 +102,22 @@ void loop() {
       matrix.clear();
       matrix.drawBitmap(0, 0, frown_bmp, 8, 8, LED_YELLOW);
       matrix.writeDisplay();
+      // turn off the display
+      delay(2000);
+      matrix.clear();
     }
     // or it is just turned on
     else {
       // clear the OLED
       SeeedOled.clearDisplay();
 
-      // also for the matrix
+      // also clear the matrix
+      matrix.clear();
+
+      // to show the system is turned on
+      matrix.drawBitmap(0, 0, smile_bmp, 8, 8, LED_YELLOW);
+      matrix.writeDisplay();
+      delay(2000);
       matrix.clear();
 
       // set the old state to be normal
@@ -116,25 +129,23 @@ void loop() {
     int current_state = NORMAL;
 
     // Sound sensor
-    long sum = 0;
+    long avgSoundVal = 0;
     for (int i = 0; i < 16; i++) {
-      sum += analogRead(pinAdc);
+      avgSoundVal += analogRead(pinAdc);
     }
-    sum >>= 4;
-
-    if (sum - lastValue > 180) {
+    avgSoundVal >>= 4;
+    // if the volume is large
+    if (avgSoundVal - lastSoundValue > SOUND_THRESHOLD) {
       // ifPrinted = false;
       current_state = current_state | SOUND_ALERT;
     }
-    lastValue = sum;
-
-    //Serial.println(sum);
+    lastSoundValue = avgSoundVal;
 
     // Distance sensors
     int LCurrentDistance = sonarLeft.ping_cm();
     int RCurrentDistance = sonarRight.ping_cm();
-    if (LCurrentDistance <= LDefaultDistance - 10 ||
-        RCurrentDistance <= RDefaultDistance - 10) {
+    if (LDefaultDistance - LCurrentDistance >=  DISTANCE_THRESHOLD ||
+        RDefaultDistance - RCurrentDistance >=  DISTANCE_THRESHOLD) {
       current_state = current_state | DIS_ALERT;
     }
 
@@ -147,16 +158,15 @@ void loop() {
 
     // display
     if (old_state != current_state) {
+      SeeedOled.clearDisplay();
       // the current state is normal
       if (current_state == 0) {
         SeeedOled.putString("All is OK.");
-        matrix.clear();
-        matrix.drawBitmap(0, 0, smile_bmp, 8, 8, LED_GREEN);
       }
       // something went wrong
       else {
         // if current_state contains TEMP_ALERT
-        string alert = "";
+        String alert = "";
         if (current_state & TEMP_ALERT) {
           alert = alert + "The temperature is not comfortable!\n";
         }
@@ -166,10 +176,25 @@ void loop() {
         if (current_state & DIS_ALERT) {
           alert = alert + "The Baby is trying to climb out!";
         }
-        SeeedOled.putString(alert);
+        int alertLength = alert.length();
+        char alertCharArray [alertLength];
+        alert.toCharArray(alertCharArray, alertLength);
+        SeeedOled.putString(alertCharArray);
         matrix.clear();
         matrix.drawBitmap(0, 0, exclamation_bmp, 8, 8, LED_RED);
       }
+      // to blink the matrix 
+      if (current_state != 0){
+        if (toDisplayMatrix){
+          matrix.drawBitmap(0, 0, exclamation_bmp, 8, 8, LED_RED);
+        }
+        else{
+          matrix.clear();
+        }
+        toDisplayMatrix = !toDisplayMatrix;
+      }
+
+
     }
     // Write display at the end after deciding what to display
     matrix.writeDisplay();
