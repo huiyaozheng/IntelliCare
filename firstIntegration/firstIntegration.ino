@@ -7,6 +7,10 @@
 // To ensure there is a change of state at startup.
 int old_state = -1;
 
+// Save consecutive states
+#define NO_OF_STATES 5
+int states[NO_OF_STATES];
+
 #define MAX_LOOP_BEFORE_ALERT 5
 #define LOOP_OF_ALERT 5
 
@@ -22,26 +26,15 @@ int remainingAlertLoops = LOOP_OF_ALERT;
 #include "Adafruit_LEDBackpack.h"
 bool ifPrinted = false;
 Adafruit_BicolorMatrix matrix = Adafruit_BicolorMatrix();
-static const uint8_t PROGMEM on_bmp[] = {B00000000, 
-                                            B01001001, 
-                                            B10101101,
-                                            B10101101, 
-                                            B10101011, 
-                                            B10101011,
-                                            B01001001, 
-                                            B00000000},                            
-                             off_bmp[] = {B00000000, 
-                                            B01011011, 
-                                            B10110010,
-                                            B10110010, 
-                                            B10111011, 
-                                            B10110010,
-                                            B01010010, 
-                                            B00000000},
-                             alert_bmp[] = {
-                                 B11111111, B11111111, B11111111, B11111111,
-                                 B11111111, B11111111, B11111111, B11111111
-};
+static const uint8_t PROGMEM on_bmp[] = {B00000000, B01001001, B10101101,
+                                         B10101101, B10101011, B10101011,
+                                         B01001001, B00000000},
+                             off_bmp[] = {B00000000, B01011011, B10110010,
+                                          B10110010, B10111011, B10110010,
+                                          B01010010, B00000000},
+                             alert_bmp[] = {B11111111, B11111111, B11111111,
+                                            B11111111, B11111111, B11111111,
+                                            B11111111, B11111111};
 // control the blinking of matrix when there is an alert
 bool blinkOn = true;
 
@@ -99,6 +92,10 @@ void setup() {
   // Distance sensors
   LDefaultDistance = sonarLeft.ping_cm();
   RDefaultDistance = sonarRight.ping_cm();
+
+  for (int i = 0; i < NO_OF_STATES; ++i) {
+    states[i] = checkSensors();
+  }
 }
 
 void printData(long soundVal, int leftDist, int rightDist, float temperature) {
@@ -113,8 +110,62 @@ void printData(long soundVal, int leftDist, int rightDist, float temperature) {
   Serial.println();
 }
 
+int checkSensors() {
+  int current_state = NORMAL;
+
+  // Sound sensor
+  long avgSoundVal = 0;
+  for (int i = 0; i < 16; i++) {
+    avgSoundVal += analogRead(pinAdc);
+  }
+  avgSoundVal >>= 4;
+  // if the volume is large
+  if (avgSoundVal - lastSoundValue > SOUND_THRESHOLD) {
+    // ifPrinted = false;
+    current_state = current_state | SOUND_ALERT;
+  }
+  lastSoundValue = avgSoundVal;
+
+  // Distance sensors
+  int LCurrentDistance = sonarLeft.ping_cm();
+  int RCurrentDistance = sonarRight.ping_cm();
+  if (LDefaultDistance - LCurrentDistance >= DISTANCE_THRESHOLD ||
+      RDefaultDistance - RCurrentDistance >= DISTANCE_THRESHOLD) {
+    current_state = current_state | DIS_ALERT;
+  }
+
+  // Temperature
+  DHT.read22(DHT22_PIN);
+  if (DHT.temperature < TEMP_LOWER_BOUND ||
+      DHT.temperature > TEMP_UPPER_BOUND) {
+    current_state = current_state | TEMP_ALERT;
+  }
+
+  printData(avgSoundVal, LCurrentDistance, RCurrentDistance, DHT.temperature);
+
+  return current_state;
+}
+
+int checkStates() {
+  int ret;
+  if (states[4] & SOUND_ALERT != 0) {
+    ret = SOUND_ALERT;
+  } else {
+    ret = 0;
+  }
+  int temp_alert = 0;
+  int dis_alert = 0;
+  for (int i = 0; i < NO_OF_STATES; ++i) {
+    if (states[i] & TEMP_ALERT != 0) temp_alert++;
+    if (states[i] & DIS_ALERT != 0) dis_alert++;
+  }
+  if (temp_alert + 2 >= NO_OF_STATES) ret = ret | TEMP_ALERT;
+  if (dis_alert + 2 >= NO_OF_STATES) ret = ret | DIS_ALERT;
+  return ret;
+}
+
 void loop() {
-  delay(200);
+  delay(100);
 
   // if the button is touched
   if (digitalRead(Touch) == 1) {
@@ -155,38 +206,12 @@ void loop() {
   }
 
   if (isOn) {
-    int current_state = NORMAL;
-
-    // Sound sensor
-    long avgSoundVal = 0;
-    for (int i = 0; i < 16; i++) {
-      avgSoundVal += analogRead(pinAdc);
+    for (int i = 0; i < NO_OF_STATES - 1; ++i) {
+      states[i] = states[i + 1];
     }
-    avgSoundVal >>= 4;
-    // if the volume is large
-    if (avgSoundVal - lastSoundValue > SOUND_THRESHOLD) {
-      // ifPrinted = false;
-      current_state = current_state | SOUND_ALERT;
-    }
-    lastSoundValue = avgSoundVal;
+    states[NO_OF_STATES - 1] = checkSensors();
 
-    // Distance sensors
-    int LCurrentDistance = sonarLeft.ping_cm();
-    int RCurrentDistance = sonarRight.ping_cm();
-    if (LDefaultDistance - LCurrentDistance >= DISTANCE_THRESHOLD ||
-        RDefaultDistance - RCurrentDistance >= DISTANCE_THRESHOLD) {
-      current_state = current_state | DIS_ALERT;
-    }
-
-    // Temperature
-    DHT.read22(DHT22_PIN);
-    if (DHT.temperature < TEMP_LOWER_BOUND ||
-        DHT.temperature > TEMP_UPPER_BOUND) {
-      current_state = current_state | TEMP_ALERT;
-    }
-
-    printData(avgSoundVal, LCurrentDistance, RCurrentDistance, DHT.temperature);
-
+    int current_state = checkStates();
     // display
     if (old_state != current_state) {
       SeeedOled.clearDisplay();
