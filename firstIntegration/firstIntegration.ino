@@ -1,18 +1,18 @@
 // define the state of the system
-#define NORMAL 0
-#define TEMP_ALERT 1
-#define SOUND_ALERT (1 << 1)
-#define DIS_ALERT (1 << 2)
+const int NORMAL = 0;
+const int TEMP_ALERT = 1;
+const int SOUND_ALERT = 2;
+const int DIS_ALERT = 4;
 
 // To ensure there is a change of state at startup.
 int old_state = -1;
 
 // Save consecutive states
-#define NO_OF_STATES 5
+const int NO_OF_STATES = 5;
 int states[NO_OF_STATES];
 
 #define MAX_LOOP_BEFORE_ALERT 5
-#define LOOP_OF_ALERT 5
+const int LOOP_OF_ALERT = 5;
 
 int currentErrorLoopCount = 0;
 int remainingAlertLoops = LOOP_OF_ALERT;
@@ -41,7 +41,7 @@ bool blinkOn = true;
 // Sound sensor
 #define pinAdc A0
 int lastSoundValue = 0;
-#define SOUND_THRESHOLD 100
+const int SOUND_THRESHOLD = 30;
 
 // Distance sensors:
 #define LtrigPin 4
@@ -65,11 +65,21 @@ int RDefaultDistance;
 dht DHT;
 #define DHT22_PIN 8
 #define TEMP_LOWER_BOUND 22
-#define TEMP_UPPER_BOUND 27
+#define TEMP_UPPER_BOUND 25
 
 // Touch switch
 #define Touch 9
 boolean isOn = false;
+
+void initialize(){
+  // Distance sensors
+  LDefaultDistance = sonarLeft.ping_cm();
+  RDefaultDistance = sonarRight.ping_cm();
+
+  for (int i = 0; i < NO_OF_STATES; ++i) {
+    states[i] = checkSensors();
+  }
+}
 
 void setup() {
   Serial.begin(115200);
@@ -89,13 +99,7 @@ void setup() {
   matrix.clear();
   matrix.writeDisplay();
 
-  // Distance sensors
-  LDefaultDistance = sonarLeft.ping_cm();
-  RDefaultDistance = sonarRight.ping_cm();
-
-  for (int i = 0; i < NO_OF_STATES; ++i) {
-    states[i] = checkSensors();
-  }
+  
 }
 
 void printData(long soundVal, int leftDist, int rightDist, float temperature) {
@@ -115,12 +119,12 @@ int checkSensors() {
 
   // Sound sensor
   long avgSoundVal = 0;
-  for (int i = 0; i < 16; i++) {
+  for (int i = 0; i < 8; i++) {
     avgSoundVal += analogRead(pinAdc);
   }
   avgSoundVal >>= 4;
   // if the volume is large
-  if (avgSoundVal - lastSoundValue > SOUND_THRESHOLD) {
+  if (abs(avgSoundVal - lastSoundValue) > SOUND_THRESHOLD) {
     // ifPrinted = false;
     current_state = current_state | SOUND_ALERT;
   }
@@ -129,8 +133,8 @@ int checkSensors() {
   // Distance sensors
   int LCurrentDistance = sonarLeft.ping_cm();
   int RCurrentDistance = sonarRight.ping_cm();
-  if (LDefaultDistance - LCurrentDistance >= DISTANCE_THRESHOLD ||
-      RDefaultDistance - RCurrentDistance >= DISTANCE_THRESHOLD) {
+  if (abs(LDefaultDistance - LCurrentDistance) >= DISTANCE_THRESHOLD ||
+      abs(RDefaultDistance - RCurrentDistance) >= DISTANCE_THRESHOLD) {
     current_state = current_state | DIS_ALERT;
   }
 
@@ -148,19 +152,19 @@ int checkSensors() {
 
 int checkStates() {
   int ret;
-  if (states[4] & SOUND_ALERT != 0) {
+  if (states[NO_OF_STATES - 1] & SOUND_ALERT != 0) {
     ret = SOUND_ALERT;
   } else {
     ret = 0;
   }
-  int temp_alert = 0;
-  int dis_alert = 0;
+  int temp = 0;
+  int dis = 0;
   for (int i = 0; i < NO_OF_STATES; ++i) {
-    if (states[i] & TEMP_ALERT != 0) temp_alert++;
-    if (states[i] & DIS_ALERT != 0) dis_alert++;
-  }
-  if (temp_alert + 2 >= NO_OF_STATES) ret = ret | TEMP_ALERT;
-  if (dis_alert + 2 >= NO_OF_STATES) ret = ret | DIS_ALERT;
+    if (states[i] & TEMP_ALERT) temp++;
+    if (states[i] & DIS_ALERT) dis=dis+1;
+  } 
+  if (temp + 2 >= NO_OF_STATES) ret = ret | TEMP_ALERT;
+  if (dis + 2 >= NO_OF_STATES) ret = ret | DIS_ALERT;
   return ret;
 }
 
@@ -198,10 +202,10 @@ void loop() {
       matrix.drawBitmap(0, 0, on_bmp, 8, 8, LED_YELLOW);
       matrix.writeDisplay();
       delay(2000);
+      initialize();
       matrix.clear();
 
-      // set the old state to be normal
-      old_state = NORMAL;
+      old_state = -1;
     }
   }
 
@@ -211,48 +215,35 @@ void loop() {
     }
     states[NO_OF_STATES - 1] = checkSensors();
 
-    int current_state = checkStates();
-    // display
-    if (old_state != current_state) {
-      SeeedOled.clearDisplay();
-      // the current state is normal
-      if (current_state == 0) {
-        currentErrorLoopCount = 0;
-        remainingAlertLoops = 0;
-        SeeedOled.putString("All is OK.");
-        matrix.clear();
-      }
-      // something went wrong
-      else {
-        String alert = "";
-        if (current_state & SOUND_ALERT) {
-          alert = alert + "The Baby is crying!\n";
-          remainingAlertLoops = LOOP_OF_ALERT;
-          blinkOn = true;
-        }
-        if (current_state & TEMP_ALERT || current_state & DIS_ALERT) {
-          if (current_state & TEMP_ALERT) {
-            alert = alert + "The temperature is not comfortable!\n";
-          }
-          if (current_state & DIS_ALERT) {
-            alert = alert + "The Baby is trying to climb out!";
-          }
-          currentErrorLoopCount++;
-          if (currentErrorLoopCount >= MAX_LOOP_BEFORE_ALERT) {
-            currentErrorLoopCount = 0;
-            remainingAlertLoops = LOOP_OF_ALERT;
-            blinkOn = true;
-          }
-        }
+    int current_state = checkStates();    
 
+    String alert = "";
+    if (current_state != 0) {
+      remainingAlertLoops = LOOP_OF_ALERT;
+      if (current_state & SOUND_ALERT) {
+        alert = alert + "The Baby is crying!\n";
+      }
+      if (current_state & TEMP_ALERT || current_state & DIS_ALERT) {
+        if (current_state & TEMP_ALERT) {
+          alert = alert + "The temperature is not comfortable!\n";
+        }
+        if (current_state & DIS_ALERT) {
+          alert = alert + "The Baby is trying to climb out!";
+        }
+      }
+    }
+    if (current_state != old_state) {
+      SeeedOled.clearDisplay();
+      if (remainingAlertLoops > 0) {
         int alertLength = alert.length();
         char alertCharArray[alertLength];
         alert.toCharArray(alertCharArray, alertLength);
         SeeedOled.putString(alertCharArray);
-        matrix.clear();
-        matrix.drawBitmap(0, 0, alert_bmp, 8, 8, LED_RED);
+      } else {
+        SeeedOled.putString("All is OK.");
       }
     }
+
     // to blink the matrix
     if (remainingAlertLoops > 0) {
       if (blinkOn) {
