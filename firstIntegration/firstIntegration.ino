@@ -71,11 +71,13 @@ dht DHT;
 #define Touch 9
 boolean isOn = false;
 
+// Refresh the thresholds and states.
 void initialize(){
   // Distance sensors
   LDefaultDistance = sonarLeft.ping_cm();
   RDefaultDistance = sonarRight.ping_cm();
-
+  
+  // Fill the initial states
   for (int i = 0; i < NO_OF_STATES; ++i) {
     states[i] = checkSensors();
   }
@@ -87,10 +89,8 @@ void setup() {
   // OLED display
   Wire.begin();
   SeeedOled.init();          // initialise SEEED OLED display
-  SeeedOled.clearDisplay();  // clear the screen and set start position to top
-                             // left corner
-  SeeedOled
-      .setNormalDisplay();  // Set display to normal mode (i.e non-inverse mode)
+  SeeedOled.clearDisplay();  // clear the screen and set start position to top left corner
+  SeeedOled.setNormalDisplay();  // Set display to normal mode (i.e non-inverse mode)
   SeeedOled.setHorizontalMode();  // Set addressing mode to Page Mode
   SeeedOled.setTextXY(0, 0);      // Set the cursor to Xth Page, Yth Column
 
@@ -98,8 +98,6 @@ void setup() {
   matrix.begin(0x70);  // pass in the address
   matrix.clear();
   matrix.writeDisplay();
-
-  
 }
 
 void printData(long soundVal, int leftDist, int rightDist, float temperature) {
@@ -114,6 +112,7 @@ void printData(long soundVal, int leftDist, int rightDist, float temperature) {
   Serial.println();
 }
 
+// Read the sensors.
 int checkSensors() {
   int current_state = NORMAL;
 
@@ -125,7 +124,6 @@ int checkSensors() {
   avgSoundVal >>= 4;
   // if the volume is large
   if (abs(avgSoundVal - lastSoundValue) > SOUND_THRESHOLD) {
-    // ifPrinted = false;
     current_state = current_state | SOUND_ALERT;
   }
   lastSoundValue = avgSoundVal;
@@ -150,6 +148,7 @@ int checkSensors() {
   return current_state;
 }
 
+// Check if abnormal state persists for some time.
 int checkStates() {
   int ret;
   if (states[NO_OF_STATES - 1] & SOUND_ALERT != 0) {
@@ -161,7 +160,7 @@ int checkStates() {
   int dis = 0;
   for (int i = 0; i < NO_OF_STATES; ++i) {
     if (states[i] & TEMP_ALERT) temp++;
-    if (states[i] & DIS_ALERT) dis=dis+1;
+    if (states[i] & DIS_ALERT) dis = dis+1;
   } 
   if (temp + 2 >= NO_OF_STATES) ret = ret | TEMP_ALERT;
   if (dis + 2 >= NO_OF_STATES) ret = ret | DIS_ALERT;
@@ -171,45 +170,45 @@ int checkStates() {
 void loop() {
   delay(100);
 
-  // if the button is touched
+  // If the button is touched
   if (digitalRead(Touch) == 1) {
     isOn = !isOn;
     if (!isOn) {
       // and it is turned off
-      // clear the OLED
+      // Clear the OLED.
       SeeedOled.clearDisplay();
-      // display it is off
       SeeedOled.putString("Monitoring is off.");
 
-      // also for the matrix
+      // Clear the matrix.
       matrix.clear();
       matrix.drawBitmap(0, 0, off_bmp, 8, 8, LED_YELLOW);
       matrix.writeDisplay();
-      // turn off the display
+
       delay(2000);
       matrix.clear();
       matrix.writeDisplay();
     }
     // or it is just turned on
     else {
-      // clear the OLED
+      // Clear the OLED.
       SeeedOled.clearDisplay();
 
-      // also clear the matrix
+      // Clear the matrix.
       matrix.clear();
 
-      // to show the system is turned on
       matrix.drawBitmap(0, 0, on_bmp, 8, 8, LED_YELLOW);
       matrix.writeDisplay();
       delay(2000);
       initialize();
       matrix.clear();
 
+      // Set the old state such that there is always change of output when it is turned on.
       old_state = -1;
     }
   }
 
   if (isOn) {
+    // Rolling states
     for (int i = 0; i < NO_OF_STATES - 1; ++i) {
       states[i] = states[i + 1];
     }
@@ -244,7 +243,7 @@ void loop() {
       }
     }
 
-    // to blink the matrix
+    // Blink the matrix.
     if (remainingAlertLoops > 0) {
       if (blinkOn) {
         matrix.drawBitmap(0, 0, alert_bmp, 8, 8, LED_RED);
@@ -256,9 +255,9 @@ void loop() {
     } else {
       matrix.clear();
     }
-    // Write display at the end after deciding what to display
+    // Write display at the end after deciding what to display.
     matrix.writeDisplay();
-    // set the old state to the current state
+    // Set the old state to the current state.
     old_state = current_state;
   }
 }
